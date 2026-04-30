@@ -20,7 +20,7 @@ namespace GitHubAction
 			return new MessageBoxInformation("Czy wykonać operację ?")
 			{
 				Text = "Opis operacji",
-				YesHandler = () => "Operacja została zakończona",
+				YesHandler = () => "Operacja została zakończona.",
 				NoHandler = () => "Operacja przerwana"
 			};
 
