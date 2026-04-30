@@ -1,0 +1,96 @@
+name: Build
+
+on:
+   workflow_dispatch:
+ #concurrency:  push:
+  #  branches: [master]
+
+jobs:
+  build:
+    runs-on: self-hosted                        # pool: name: Default
+
+    steps:
+    # NuGetToolInstaller@1 + NuGetCommand@2
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore NuGet
+      run: |
+        $sln = Get-ChildItem -Recurse -Filter "*.sln" | Select-Object -First 1 -ExpandProperty FullName
+        Write-Host "Restoring: $sln"
+        dotnet restore $sln --configfile NuGet.config
+      shell: powershell
+
+
+    # Assembly-Info-NetFramework@2 (wersjonowanie)
+    - name: Set version
+      id: version
+      run: |
+        $yymm = Get-Date -Format "yyMM"
+        $dd   = Get-Date -Format "dd"
+        $hhmm = Get-Date -Format "HHmm"
+        $ddMMMyyyy = Get-Date -Format "dd MMMM yyyy"
+        $ver  = "$yymm.${{ github.run_number }}.$dd.$hhmm"
+        echo "VERSION=$ver"              >> $env:GITHUB_OUTPUT
+        echo "COPYRIGHT_DATE=$ddMMMyyyy" >> $env:GITHUB_OUTPUT
+        Write-Host "Wersja: $ver"
+      shell: powershell
+
+    # VSBuild@1
+        # VSBuild@1
+    - name: Build
+      run: |
+        $sln = Get-ChildItem -Recurse -Filter "*.sln" | Select-Object -First 1 -ExpandProperty FullName
+        Write-Host "Building: $sln"
+        dotnet build $sln `
+          --configuration Release `
+          --no-restore `
+          /p:Version="${{ steps.version.outputs.VERSION }}" `
+          /p:AssemblyVersion="${{ steps.version.outputs.VERSION }}" `
+          /p:FileVersion="${{ steps.version.outputs.VERSION }}" `
+          /p:InformationalVersion="${{ steps.version.outputs.VERSION }}" `
+          /p:Title="${{ github.event.repository.name }}" `
+          /p:Product="${{ github.event.repository.name }}" `
+          /p:Company="Agemit Sp. z o.o." `
+          /p:Copyright="Copyright © ${{ steps.version.outputs.COPYRIGHT_DATE }} Agemit Sp. z o.o." `
+          /p:Trademark="MD"
+      shell: powershell
+
+
+    # PublishSymbols@2
+    - name: Publish symbols
+      uses: actions/upload-artifact@v4
+      if: always()                              # continueOnError: true
+      with:
+        name: symbols
+        path: '**/bin/**/*.pdb'
+        retention-days: 10
+
+    # CopyFiles@2 → artifactstagingdirectory
+    - name: Copy bin to staging
+      if: always()                              # condition: succeededOrFailed()
+      run: |
+        New-Item -ItemType Directory -Force -Path staging
+        Get-ChildItem -Recurse -Path "." -Filter "*" |
+          Where-Object { $_.FullName -match "\\bin\\Release\\" } |
+          ForEach-Object {
+            $rel = $_.FullName.Substring((Get-Location).Path.Length + 1)
+            $dest = Join-Path "staging" $rel
+            New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+            Copy-Item $_.FullName -Destination $dest -Force
+          }
+      shell: powershell
+
+    # PublishBuildArtifacts@1
+    - name: Publish artifact drop
+      uses: actions/upload-artifact@v4
+      if: always()                              # condition: succeededOrFailed()
+      with:
+        name: drop
+        path: staging/
+        retention-days: 30
