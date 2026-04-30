@@ -9,4 +9,9 @@
   <ItemGroup>
     <EmbeddedResource Remove="DokHanWorkerParams.Ogolne.pageform.xml" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="NuGet.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
